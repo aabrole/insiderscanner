@@ -1,0 +1,14 @@
+{
+  "SPY": {
+    "polymarket": "spx-up-or-down-on-december-31-2025",
+    "kalshi": null
+  },
+  "SPX": {
+    "polymarket": "spx-up-or-down-on-december-31-2025",
+    "kalshi": null
+  },
+  "AAPL": {
+    "polymarket": null,
+    "kalshi": null
+  }
+}

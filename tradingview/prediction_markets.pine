@@ -1,0 +1,127 @@
+// @version=5
+indicator("Prediction Markets (Polymarket / Kalshi)", overlay = false, max_bars_back = 500)
+
+// --- Inputs ---
+string baseUrlInput = input.string(
+     "",
+     "Backend base URL",
+     group = "API",
+     tooltip = "e.g. https://your-app.vercel.app (no trailing slash)"
+ )
+string symbolOverride = input.string(
+     "",
+     "Symbol override",
+     group = "API",
+     tooltip = "Leave empty to use chart symbol (e.g. SPY, SPX). Set to a key from config to show that market."
+ )
+int requestEveryBars = input.int(10, "Request every N bars", minval = 1, group = "API", tooltip = "Rate limit: fewer requests = less load")
+int timeoutMs = input.int(5000, "HTTP timeout (ms)", minval = 1000, group = "API")
+
+// --- Symbol to request ---
+string symbol = str.length(symbolOverride) > 0 ? symbolOverride : syminfo.ticker
+string url = str.length(baseUrlInput) > 0 ? baseUrlInput + "/api/prediction?symbol=" + symbol : ""
+
+// --- Rate limit: only request on confirmed bar, every N bars ---
+bool doRequest = barstate.isconfirmed and (bar_index % requestEveryBars == 0)
+
+// --- HTTP request ---
+// request.http() returns a map with "body" (string) and "status" (int), or a request_id if async.
+var string lastBody = ""
+var int lastStatus = 0
+var string lastError = ""
+
+if doRequest and str.length(url) > 0
+    result = request.http(url, "GET", map.new<string, string>(), "", timeoutMs)
+    if not na(result)
+        body = map.get(result, "body")
+        status = map.get(result, "status")
+        if not na(body)
+            lastBody := body
+        if not na(status)
+            lastStatus := math.round(status)
+        else
+            lastStatus := 200
+        lastError := ""
+else
+    if str.length(url) == 0 and barstate.islast
+        lastError := "Set Backend base URL in settings"
+
+// --- Parse response: support both single "prediction" (Phase 1) and "polymarket"/"kalshi" (Phase 2) ---
+var table infoTable = table.new(position.top_right, 2, 6, bgcolor = color.new(color.black, 85), border_width = 1)
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, "Prediction Markets", text_color = color.white, text_size = size.small)
+    table.cell(infoTable, 1, 0, symbol, text_color = color.gray, text_size = size.small)
+
+    if str.length(lastError) > 0
+        table.cell(infoTable, 0, 1, "Info", text_color = color.orange, text_size = size.tiny)
+        table.cell(infoTable, 1, 1, lastError, text_color = color.orange, text_size = size.tiny)
+    else if str.length(lastBody) > 0 and lastStatus == 200
+        // Simple extraction: look for "yes":0.xx and "question":"..." in body (works without full JSON lib)
+        extractYes(s) =>
+            start = str.indexof(s, "\"yes\":")
+            if start >= 0
+                numStart = start + 6
+                numEnd = str.indexof(s, ",", numStart) > 0 ? str.indexof(s, ",", numStart) : str.indexof(s, "}", numStart)
+                numEnd := numEnd > 0 ? numEnd : str.length(s)
+                str.tonumber(str.substring(s, numStart, numEnd))
+            else
+                na
+        extractQuestion(s) =>
+            start = str.indexof(s, "\"question\":\"")
+            if start >= 0
+                qStart = start + 12
+                qEnd = str.indexof(s, "\",", qStart)
+                qEnd := qEnd > 0 ? qEnd : str.length(s)
+                str.replace(str.substring(s, qStart, qEnd), "\\\"", "\"")
+            else
+                ""
+
+        row = 1
+        // Polymarket
+        polyStart = str.indexof(lastBody, "\"polymarket\":")
+        if polyStart >= 0
+            polySlice = str.substring(lastBody, polyStart, str.length(lastBody))
+            yesVal = extractYes(polySlice)
+            q = extractQuestion(polySlice)
+            table.cell(infoTable, 0, row, "Polymarket", text_color = color.aqua, text_size = size.tiny)
+            table.cell(infoTable, 1, row, not na(yesVal) ? str.tostring(yesVal * 100, "#.#") + "% Yes" : "—", text_color = color.white, text_size = size.tiny)
+            row += 1
+            if str.length(q) > 0
+                table.cell(infoTable, 0, row, "  Question", text_color = color.gray, text_size = size.tiny)
+                table.cell(infoTable, 1, row, str.length(q) > 40 ? str.substring(q, 0, 37) + "..." : q, text_color = color.gray, text_size = size.tiny)
+                row += 1
+
+        // Kalshi
+        kalshiStart = str.indexof(lastBody, "\"kalshi\":")
+        if kalshiStart >= 0
+            kalshiSlice = str.substring(lastBody, kalshiStart, str.length(lastBody))
+            yesValK = extractYes(kalshiSlice)
+            qK = extractQuestion(kalshiSlice)
+            table.cell(infoTable, 0, row, "Kalshi", text_color = color.orange, text_size = size.tiny)
+            table.cell(infoTable, 1, row, not na(yesValK) ? str.tostring(yesValK * 100, "#.#") + "% Yes" : "—", text_color = color.white, text_size = size.tiny)
+            row += 1
+            if str.length(qK) > 0
+                table.cell(infoTable, 0, row, "  Question", text_color = color.gray, text_size = size.tiny)
+                table.cell(infoTable, 1, row, str.length(qK) > 40 ? str.substring(qK, 0, 37) + "..." : qK, text_color = color.gray, text_size = size.tiny)
+                row += 1
+
+        // Phase 1 fallback: single "prediction" object
+        if polyStart < 0 and kalshiStart < 0
+            predStart = str.indexof(lastBody, "\"prediction\":")
+            if predStart >= 0
+                predSlice = str.substring(lastBody, predStart, str.length(lastBody))
+                yesValP = extractYes(predSlice)
+                qP = extractQuestion(predSlice)
+                table.cell(infoTable, 0, row, "Prediction", text_color = color.aqua, text_size = size.tiny)
+                table.cell(infoTable, 1, row, not na(yesValP) ? str.tostring(yesValP * 100, "#.#") + "% Yes" : "—", text_color = color.white, text_size = size.tiny)
+                row += 1
+                if str.length(qP) > 0
+                    table.cell(infoTable, 0, row, "  Question", text_color = color.gray, text_size = size.tiny)
+                    table.cell(infoTable, 1, row, str.length(qP) > 40 ? str.substring(qP, 0, 37) + "..." : qP, text_color = color.gray, text_size = size.tiny)
+    else if lastStatus != 0 and lastStatus != 200
+        table.cell(infoTable, 0, 1, "HTTP", text_color = color.red, text_size = size.tiny)
+        table.cell(infoTable, 1, 1, "Status " + str.tostring(lastStatus), text_color = color.red, text_size = size.tiny)
+    else if str.length(lastBody) == 0 and str.length(url) > 0
+        table.cell(infoTable, 0, 1, "Status", text_color = color.yellow, text_size = size.tiny)
+        table.cell(infoTable, 1, 1, "Waiting for data…", text_color = color.yellow, text_size = size.tiny)
