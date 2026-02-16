@@ -7,7 +7,7 @@
 // 2. Apply this indicator → it shows a table with Probability, Smoothed, ROC, Regime.
 // 3. In inputs: set Pine Seed source and symbol to match your repo/CSV name.
 //
-// @version=5
+// @version=6
 indicator("Prediction Markets (Pine Seeds)", overlay = false, max_bars_back = 500, max_lines_count = 500, max_labels_count = 500)
 
 // --- Inputs ---
@@ -21,33 +21,25 @@ float  bearThreshold   = input.float(40.0, "Bear regime (<)", minval = 0, maxval
 float  bullThreshold   = input.float(60.0, "Bull regime (>)", minval = 0, maxval = 100, group = "Regime")
 float  rocSpikePct     = input.float(5.0, "ROC spike alert (%)", minval = 0.1, group = "Alerts")
 
-// --- Table position ---
-var position pos = position.top_right
-if tablePosition == "Top Left"
-    pos := position.top_left
-else if tablePosition == "Middle Right"
-    pos := position.middle_right
-else if tablePosition == "Middle Left"
-    pos := position.middle_left
-else
-    pos := position.top_right
+// --- Table position (v6: no type keyword) ---
+pos = tablePosition == "Top Left" ? position.top_left : tablePosition == "Middle Right" ? position.middle_right : tablePosition == "Middle Left" ? position.middle_left : position.top_right
 
-// --- Load seed data (close = probability 0–100) ---
-float prob = request.seed(seedSourceInput, seedSymbolInput, "close")
-float smooth = ta.ema(prob, emaLength)
-float roc = prob[1] != 0 ? (prob - prob[1]) / prob[1] * 100.0 : 0.0
-bool isBear = prob < bearThreshold
-bool isBull = prob > bullThreshold
-bool isNeutral = not isBear and not isBull
+// --- Load seed data (close = probability 0–100). v6: no type keyword, infer from request.seed() ---
+prob = request.seed(seedSourceInput, seedSymbolInput, "close")
+smooth = ta.ema(prob, emaLength)
+roc = prob[1] != 0 ? (prob - prob[1]) / prob[1] * 100.0 : 0.0
+isBear = prob < bearThreshold
+isBull = prob > bullThreshold
+isNeutral = not isBear and not isBull
 
 // --- Regime label ---
-string regimeStr = isBear ? "Bear" : isBull ? "Bull" : "Neutral"
+regimeStr = isBear ? "Bear" : isBull ? "Bull" : "Neutral"
 
 // --- Table: display all prediction data on the chart ---
-var table infoTable = table.new(pos, 2, 12, bgcolor = color.new(#131722, 10), border_width = 1, border_color = color.new(#787b86, 50))
+var infoTable = table.new(pos, 2, 12, bgcolor = color.new(#131722, 10), border_width = 1, border_color = color.new(#787b86, 50))
 
 if barstate.islast and showTable
-    int row = 0
+    row = 0
     table.cell(infoTable, 0, row, "Prediction Markets", text_color = color.white, text_size = size.normal)
     table.cell(infoTable, 1, row, seedSymbolInput, text_color = color.gray, text_size = size.small)
     row += 1
@@ -61,7 +53,7 @@ if barstate.islast and showTable
     table.cell(infoTable, 1, row, str.tostring(roc, "#.##") + " %", text_color = roc >= 0 ? color.new(#00c853, 0) : color.new(#ff5252, 0), text_size = size.small)
     row += 1
     table.cell(infoTable, 0, row, "Regime", text_color = color.gray, text_size = size.small)
-    color regimeColor = isBear ? #ff5252 : isBull ? #69f0ae : #ffeb3b
+    regimeColor = isBear ? #ff5252 : isBull ? #69f0ae : #ffeb3b
     table.cell(infoTable, 1, row, regimeStr, text_color = regimeColor, text_size = size.small)
     row += 1
     table.cell(infoTable, 0, row, "", text_color = color.gray, text_size = size.tiny)
