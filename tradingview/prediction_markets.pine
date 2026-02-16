@@ -1,12 +1,33 @@
-// @version=5
+// @version=6
 indicator("Prediction Markets (Polymarket / Kalshi)", overlay = false, max_bars_back = 500)
+
+// --- Helpers: must be at top level (Pine does not allow functions inside if blocks) ---
+extractYes(s) =>
+    start = str.indexof(s, "\"yes\":")
+    if start >= 0
+        numStart = start + 6
+        numEnd = str.indexof(s, ",", numStart) > 0 ? str.indexof(s, ",", numStart) : str.indexof(s, "}", numStart)
+        numEnd := numEnd > 0 ? numEnd : str.length(s)
+        str.tonumber(str.substring(s, numStart, numEnd))
+    else
+        na
+
+extractQuestion(s) =>
+    start = str.indexof(s, "\"question\":\"")
+    if start >= 0
+        qStart = start + 12
+        qEnd = str.indexof(s, "\",", qStart)
+        qEnd := qEnd > 0 ? qEnd : str.length(s)
+        str.replace(str.substring(s, qStart, qEnd), "\\\"", "\"")
+    else
+        ""
 
 // --- Inputs ---
 string baseUrlInput = input.string(
-     "",
+     "https://insiderscanner.vercel.app",
      "Backend base URL",
      group = "API",
-     tooltip = "e.g. https://your-app.vercel.app (no trailing slash)"
+     tooltip = "e.g. https://insiderscanner.vercel.app (no trailing slash)"
  )
 string symbolOverride = input.string(
      "",
@@ -57,26 +78,6 @@ if barstate.islast
         table.cell(infoTable, 0, 1, "Info", text_color = color.orange, text_size = size.tiny)
         table.cell(infoTable, 1, 1, lastError, text_color = color.orange, text_size = size.tiny)
     else if str.length(lastBody) > 0 and lastStatus == 200
-        // Simple extraction: look for "yes":0.xx and "question":"..." in body (works without full JSON lib)
-        extractYes(s) =>
-            start = str.indexof(s, "\"yes\":")
-            if start >= 0
-                numStart = start + 6
-                numEnd = str.indexof(s, ",", numStart) > 0 ? str.indexof(s, ",", numStart) : str.indexof(s, "}", numStart)
-                numEnd := numEnd > 0 ? numEnd : str.length(s)
-                str.tonumber(str.substring(s, numStart, numEnd))
-            else
-                na
-        extractQuestion(s) =>
-            start = str.indexof(s, "\"question\":\"")
-            if start >= 0
-                qStart = start + 12
-                qEnd = str.indexof(s, "\",", qStart)
-                qEnd := qEnd > 0 ? qEnd : str.length(s)
-                str.replace(str.substring(s, qStart, qEnd), "\\\"", "\"")
-            else
-                ""
-
         row = 1
         // Polymarket
         polyStart = str.indexof(lastBody, "\"polymarket\":")
