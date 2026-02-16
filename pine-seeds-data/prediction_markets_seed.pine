@@ -1,61 +1,83 @@
-// This Pine Script™ indicator plots prediction market probabilities from Pine Seeds data.
-// It does NOT fetch external URLs; it uses request.seed() to read data published to a
-// Pine Seeds–compatible GitHub repo (CSV OHLCV daily bars with probability in close 0–100).
+// This Pine Script™ indicator shows prediction market probabilities from Pine Seeds data
+// in a TABLE on the chart (like a normal indicator) and optionally as plotted series.
+// It uses request.seed() to read data from a Pine Seeds–compatible GitHub repo.
 //
 // === SETUP ===
-// 1. Add the Pine Seeds symbol to your chart:
-//    - In TradingView, open the chart and use Symbol Search (or Add Symbol).
-//    - Enter the full seed symbol, e.g. SEED_OWNER_REPO:PM_SPX_UP_TODAY_YES
-//    - Symbol format: SEED_<github_owner>_<repo_suffix>:<output_csv_name>
-//    - Example: if repo is github.com/you/prediction-markets-seeds and CSV is PM_SPX_UP_TODAY_YES.csv,
-//      the symbol is typically SEED_YOU_PREDICTION_MARKETS_SEEDS:PM_SPX_UP_TODAY_YES (see Pine Seeds docs for your repo).
-// 2. Apply this indicator to the same chart (or to a chart that has the seed symbol as the main symbol).
-// 3. In the indicator inputs, choose which series to plot (if you have multiple seed symbols on the chart, use the Seed symbol input to match).
-//
-// === LIMITATIONS OF PINE SEEDS ===
-// - Data can only be updated a limited number of times per day (e.g. 5).
-// - Only daily (1D) and higher timeframes apply; intraday is not supported.
-// - New repositories: Pine Seeds creation has been suspended for new repos; existing repos continue to work.
-// - Updates appear after TradingView syncs (can take minutes).
+// 1. Add the Pine Seeds symbol to your chart (Symbol Search → e.g. SEED_OWNER_REPO:PM_SPX_UP_TODAY_YES).
+// 2. Apply this indicator → it shows a table with Probability, Smoothed, ROC, Regime.
+// 3. In inputs: set Pine Seed source and symbol to match your repo/CSV name.
 //
 // @version=5
 indicator("Prediction Markets (Pine Seeds)", overlay = false, max_bars_back = 500, max_lines_count = 500, max_labels_count = 500)
 
 // --- Inputs ---
-string seedSourceInput = input.string("seed_owner_repo", "Pine Seed source (repo id)", group = "Seed", tooltip = "The source id from Pine Seeds, e.g. seed_owner_repo")
-string seedSymbolInput  = input.string("PM_SPX_UP_TODAY_YES", "Pine Seed symbol (CSV name)", group = "Seed", tooltip = "Symbol name = CSV filename without .csv")
-string seriesToShow     = input.string("All", "Series to show", options = ["Probability", "Smoothed (EMA)", "ROC", "All"], group = "Display")
-int    emaLength        = input.int(5, "EMA length (smoothing)", minval = 1, group = "Display")
-float  bearThreshold    = input.float(40.0, "Bear regime threshold (<)", minval = 0, maxval = 100, group = "Regime")
-float  bullThreshold    = input.float(60.0, "Bull regime threshold (>)", minval = 0, maxval = 100, group = "Regime")
-float  rocSpikePct      = input.float(5.0, "ROC spike alert threshold (%)", minval = 0.1, group = "Alerts")
+string seedSourceInput = input.string("seed_owner_repo", "Pine Seed source (repo id)", group = "Seed")
+string seedSymbolInput  = input.string("PM_SPX_UP_TODAY_YES", "Pine Seed symbol (CSV name)", group = "Seed")
+bool   showTable       = input.bool(true, "Show table on chart", group = "Display")
+bool   showPlots       = input.bool(true, "Show plotted series (lines)", group = "Display")
+string tablePosition   = input.string("Top Right", "Table position", options = ["Top Right", "Top Left", "Middle Right", "Middle Left"], group = "Display")
+int    emaLength       = input.int(5, "EMA length (smoothing)", minval = 1, group = "Display")
+float  bearThreshold   = input.float(40.0, "Bear regime (<)", minval = 0, maxval = 100, group = "Regime")
+float  bullThreshold   = input.float(60.0, "Bull regime (>)", minval = 0, maxval = 100, group = "Regime")
+float  rocSpikePct     = input.float(5.0, "ROC spike alert (%)", minval = 0.1, group = "Alerts")
+
+// --- Table position ---
+var position pos = position.top_right
+if tablePosition == "Top Left"
+    pos := position.top_left
+else if tablePosition == "Middle Right"
+    pos := position.middle_right
+else if tablePosition == "Middle Left"
+    pos := position.middle_left
+else
+    pos := position.top_right
 
 // --- Load seed data (close = probability 0–100) ---
 float prob = request.seed(seedSourceInput, seedSymbolInput, "close")
-
-// --- Smoothed (EMA) ---
 float smooth = ta.ema(prob, emaLength)
-
-// --- ROC (rate of change): percent change from previous close ---
 float roc = prob[1] != 0 ? (prob - prob[1]) / prob[1] * 100.0 : 0.0
-
-// --- Regime shading: bear < 40, neutral 40–60, bull > 60 ---
 bool isBear = prob < bearThreshold
 bool isBull = prob > bullThreshold
 bool isNeutral = not isBear and not isBull
 
-// --- Plot probability line ---
-plot(seriesToShow == "Probability" or seriesToShow == "All" ? prob : na, "Probability", color = color.new(#2962ff, 0), linewidth = 2)
-plot(seriesToShow == "Smoothed (EMA)" or seriesToShow == "All" ? smooth : na, "Smoothed (EMA)", color = color.new(#00c853, 0), linewidth = 1)
-plot(seriesToShow == "ROC" or seriesToShow == "All" ? roc : na, "ROC (%)", color = color.new(#ffab00, 0), linewidth = 1)
+// --- Regime label ---
+string regimeStr = isBear ? "Bear" : isBull ? "Bull" : "Neutral"
 
-// --- Regime background ---
-bgcolor(isBear ? color.new(#ff5252, 85) : isBull ? color.new(#69f0ae, 85) : color.new(#ffeb3b, 92))
+// --- Table: display all prediction data on the chart ---
+var table infoTable = table.new(pos, 2, 12, bgcolor = color.new(#131722, 10), border_width = 1, border_color = color.new(#787b86, 50))
 
-// --- Zero line for ROC ---
-hline(0, "ROC zero", color = color.gray, linestyle = hline.style_dotted)
+if barstate.islast and showTable
+    int row = 0
+    table.cell(infoTable, 0, row, "Prediction Markets", text_color = color.white, text_size = size.normal)
+    table.cell(infoTable, 1, row, seedSymbolInput, text_color = color.gray, text_size = size.small)
+    row += 1
+    table.cell(infoTable, 0, row, "Probability", text_color = color.gray, text_size = size.small)
+    table.cell(infoTable, 1, row, str.tostring(prob, "#.##") + " %", text_color = color.white, text_size = size.small)
+    row += 1
+    table.cell(infoTable, 0, row, "Smoothed (EMA)", text_color = color.gray, text_size = size.small)
+    table.cell(infoTable, 1, row, str.tostring(smooth, "#.##") + " %", text_color = #00c853, text_size = size.small)
+    row += 1
+    table.cell(infoTable, 0, row, "ROC", text_color = color.gray, text_size = size.small)
+    table.cell(infoTable, 1, row, str.tostring(roc, "#.##") + " %", text_color = roc >= 0 ? color.new(#00c853, 0) : color.new(#ff5252, 0), text_size = size.small)
+    row += 1
+    table.cell(infoTable, 0, row, "Regime", text_color = color.gray, text_size = size.small)
+    color regimeColor = isBear ? #ff5252 : isBull ? #69f0ae : #ffeb3b
+    table.cell(infoTable, 1, row, regimeStr, text_color = regimeColor, text_size = size.small)
+    row += 1
+    table.cell(infoTable, 0, row, "", text_color = color.gray, text_size = size.tiny)
+    table.cell(infoTable, 1, row, "", text_color = color.gray, text_size = size.tiny)
+    row += 1
+    table.cell(infoTable, 0, row, "Seed", text_color = color.gray, text_size = size.tiny)
+    table.cell(infoTable, 1, row, seedSourceInput + ":" + seedSymbolInput, text_color = color.gray, text_size = size.tiny)
 
-// --- Alert conditions ---
+// --- Optional plots ---
+plot(showPlots ? prob : na, "Probability", color = color.new(#2962ff, 0), linewidth = 2)
+plot(showPlots ? smooth : na, "Smoothed (EMA)", color = color.new(#00c853, 0), linewidth = 1)
+plot(showPlots ? roc : na, "ROC (%)", color = color.new(#ffab00, 0), linewidth = 1)
+bgcolor(showPlots and (isBear or isBull or isNeutral) ? (isBear ? color.new(#ff5252, 85) : isBull ? color.new(#69f0ae, 85) : color.new(#ffeb3b, 92)) : na)
+hline(showPlots ? 0 : na, "ROC zero", color = color.gray, linestyle = hline.style_dotted)
+
+// --- Alerts ---
 alertcondition(ta.crossover(prob, bearThreshold), "Cross above bear threshold", "Probability crossed above bear threshold")
 alertcondition(ta.crossunder(prob, bearThreshold), "Cross below bear threshold", "Probability crossed below bear threshold")
 alertcondition(ta.crossover(prob, bullThreshold), "Cross above bull threshold", "Probability crossed above bull threshold")
