@@ -19,7 +19,7 @@ string symbolOverride = input.string(
 string symbol = str.length(symbolOverride) > 0 ? symbolOverride : syminfo.ticker
 string baseUrl = str.length(baseUrlInput) > 0 ? baseUrlInput : ""
 string apiUrl = str.length(baseUrl) > 0 ? baseUrl + "/api/prediction?symbol=" + symbol : ""
-string statsUrl = str.length(baseUrl) > 0 ? baseUrl + "/predictions.html" : ""
+string statsUrl = str.length(baseUrl) > 0 ? baseUrl + "/predictions" : ""
 
 // --- Table ---
 var table infoTable = table.new(position.top_right, 2, 10, bgcolor = color.new(color.black, 85), border_width = 1)

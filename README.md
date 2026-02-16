@@ -63,7 +63,7 @@ The indicator table shows two links: **SPX-style stats** (the predictions page) 
 
 ### 4. View SPX prediction stats (like Polymarket)
 
-Open **`https://your-app.vercel.app/predictions.html`** in a browser. You get a grid of prediction markets (default topic: **spx**) with:
+Open **`https://your-app.vercel.app/predictions`** (or `/predictions.html`) in a browser. You get a grid of prediction markets (default topic: **spx**) with:
 
 - Question title  
 - **X% Up / X% Down / X% Yes** (live odds)  
@@ -83,7 +83,7 @@ insiderscanner/
 │   └── markets.json        # Symbol → Polymarket slug / Kalshi ticker
 ├── tradingview/
 │   └── prediction_markets.pine
-├── predictions.html        # SPX-style stats page (Polymarket-like grid)
+├── predictions.html        # SPX stats page (served at /predictions via api/predictions.ts)
 ├── package.json
 ├── vercel.json
 └── README.md
