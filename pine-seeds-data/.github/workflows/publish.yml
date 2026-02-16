@@ -1,0 +1,55 @@
+# Publish prediction market probabilities to Pine Seeds CSVs at 5 fixed times per US trading day.
+# Schedule: every 10 minutes on weekdays (Mon–Fri). Time gate: only publish at:
+#   09:30:00, 10:52:30, 12:15:00, 13:37:30, 15:00:00 America/New_York (DST-safe).
+
+name: Publish Pine Seeds
+
+on:
+  schedule:
+    # Every 10 minutes on weekdays (UTC; adjust if needed for NY)
+    - cron: '*/10 * * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node (for pmxt sidecar)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pmxt (Python + Node sidecar)
+        run: |
+          pip install pmxt
+          npm install -g pmxtjs
+
+      - name: Time gate (America/New_York)
+        id: timegate
+        run: |
+          python3 scripts/timegate.py >> $GITHUB_OUTPUT
+          grep -q 'in_window=true' $GITHUB_OUTPUT && echo "In publish window." || echo "Not in publish window (NY 09:30, 10:52:30, 12:15, 13:37:30, 15:00). Skipping publish steps."
+
+      - name: Run publisher
+        if: steps.timegate.outputs.in_window == 'true'
+        run: |
+          cd ${{ github.workspace }}
+          python3 scripts/publish.py
+
+      - name: Commit and push CSV changes
+        if: steps.timegate.outputs.in_window == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add *.csv
+          git diff --staged --quiet || (git commit -m "Pine Seeds: update prediction snapshots $(date -u +%Y-%m-%dT%H:%MZ)" && git push)

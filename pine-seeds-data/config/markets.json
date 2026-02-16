@@ -1,0 +1,11 @@
+{
+  "markets": [
+    {
+      "symbol_group": "SPX",
+      "exchange": "polymarket",
+      "slug": "spx-up-or-down-on-december-31-2025",
+      "outcome": "YES",
+      "output_csv_name": "PM_SPX_UP_TODAY_YES"
+    }
+  ]
+}

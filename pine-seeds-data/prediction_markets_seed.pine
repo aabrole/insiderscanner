@@ -1,0 +1,65 @@
+// This Pine Script™ indicator plots prediction market probabilities from Pine Seeds data.
+// It does NOT fetch external URLs; it uses request.seed() to read data published to a
+// Pine Seeds–compatible GitHub repo (CSV OHLCV daily bars with probability in close 0–100).
+//
+// === SETUP ===
+// 1. Add the Pine Seeds symbol to your chart:
+//    - In TradingView, open the chart and use Symbol Search (or Add Symbol).
+//    - Enter the full seed symbol, e.g. SEED_OWNER_REPO:PM_SPX_UP_TODAY_YES
+//    - Symbol format: SEED_<github_owner>_<repo_suffix>:<output_csv_name>
+//    - Example: if repo is github.com/you/prediction-markets-seeds and CSV is PM_SPX_UP_TODAY_YES.csv,
+//      the symbol is typically SEED_YOU_PREDICTION_MARKETS_SEEDS:PM_SPX_UP_TODAY_YES (see Pine Seeds docs for your repo).
+// 2. Apply this indicator to the same chart (or to a chart that has the seed symbol as the main symbol).
+// 3. In the indicator inputs, choose which series to plot (if you have multiple seed symbols on the chart, use the Seed symbol input to match).
+//
+// === LIMITATIONS OF PINE SEEDS ===
+// - Data can only be updated a limited number of times per day (e.g. 5).
+// - Only daily (1D) and higher timeframes apply; intraday is not supported.
+// - New repositories: Pine Seeds creation has been suspended for new repos; existing repos continue to work.
+// - Updates appear after TradingView syncs (can take minutes).
+//
+// @version=5
+indicator("Prediction Markets (Pine Seeds)", overlay = false, max_bars_back = 500, max_lines_count = 500, max_labels_count = 500)
+
+// --- Inputs ---
+string seedSourceInput = input.string("seed_owner_repo", "Pine Seed source (repo id)", group = "Seed", tooltip = "The source id from Pine Seeds, e.g. seed_owner_repo")
+string seedSymbolInput  = input.string("PM_SPX_UP_TODAY_YES", "Pine Seed symbol (CSV name)", group = "Seed", tooltip = "Symbol name = CSV filename without .csv")
+string seriesToShow     = input.string("All", "Series to show", options = ["Probability", "Smoothed (EMA)", "ROC", "All"], group = "Display")
+int    emaLength        = input.int(5, "EMA length (smoothing)", minval = 1, group = "Display")
+float  bearThreshold    = input.float(40.0, "Bear regime threshold (<)", minval = 0, maxval = 100, group = "Regime")
+float  bullThreshold    = input.float(60.0, "Bull regime threshold (>)", minval = 0, maxval = 100, group = "Regime")
+float  rocSpikePct      = input.float(5.0, "ROC spike alert threshold (%)", minval = 0.1, group = "Alerts")
+
+// --- Load seed data (close = probability 0–100) ---
+float prob = request.seed(seedSourceInput, seedSymbolInput, "close")
+
+// --- Smoothed (EMA) ---
+float smooth = ta.ema(prob, emaLength)
+
+// --- ROC (rate of change): percent change from previous close ---
+float roc = prob[1] != 0 ? (prob - prob[1]) / prob[1] * 100.0 : 0.0
+
+// --- Regime shading: bear < 40, neutral 40–60, bull > 60 ---
+bool isBear = prob < bearThreshold
+bool isBull = prob > bullThreshold
+bool isNeutral = not isBear and not isBull
+
+// --- Plot probability line ---
+plot(seriesToShow == "Probability" or seriesToShow == "All" ? prob : na, "Probability", color = color.new(#2962ff, 0), linewidth = 2)
+plot(seriesToShow == "Smoothed (EMA)" or seriesToShow == "All" ? smooth : na, "Smoothed (EMA)", color = color.new(#00c853, 0), linewidth = 1)
+plot(seriesToShow == "ROC" or seriesToShow == "All" ? roc : na, "ROC (%)", color = color.new(#ffab00, 0), linewidth = 1)
+
+// --- Regime background ---
+bgcolor(isBear ? color.new(#ff5252, 85) : isBull ? color.new(#69f0ae, 85) : color.new(#ffeb3b, 92))
+
+// --- Zero line for ROC ---
+hline(0, "ROC zero", color = color.gray, linestyle = hline.style_dotted)
+
+// --- Alert conditions ---
+alertcondition(ta.crossover(prob, bearThreshold), "Cross above bear threshold", "Probability crossed above bear threshold")
+alertcondition(ta.crossunder(prob, bearThreshold), "Cross below bear threshold", "Probability crossed below bear threshold")
+alertcondition(ta.crossover(prob, bullThreshold), "Cross above bull threshold", "Probability crossed above bull threshold")
+alertcondition(ta.crossunder(prob, bullThreshold), "Cross below bull threshold", "Probability crossed below bull threshold")
+alertcondition(ta.cross(roc, rocSpikePct) or ta.cross(roc, -rocSpikePct), "ROC spike", "Prediction market ROC spike")
+alertcondition(ta.crossover(prob, smooth), "Prob cross above EMA", "Probability crossed above smoothed")
+alertcondition(ta.crossunder(prob, smooth), "Prob cross below EMA", "Probability crossed below smoothed")
