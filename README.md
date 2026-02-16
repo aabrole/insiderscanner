@@ -14,13 +14,14 @@ Show **Polymarket** and **Kalshi** prediction market probabilities on TradingVie
 
 ### 1. Deploy the backend (Vercel, free)
 
-```bash
-cd /path/to/insiderscanner
-npm install
-npx vercel
-```
+This project is a **Next.js** app so Vercel auto-detects it. Connect the repo in [Vercel](https://vercel.com); no extra config needed.
 
-Follow the prompts and note your deployment URL (e.g. `https://insiderscanner-xxx.vercel.app`).
+- **Root URL** and **/predictions** → predictions page (SPX-style stats)
+- **/api/health** → `{"ok":true}`
+- **/api/prediction?symbol=SPY** → single-symbol JSON
+- **/api/predictions-list?topic=spx** → list of markets JSON
+
+If you deploy from the CLI: `npm install && npx vercel --prod`
 
 ### 2. Configure symbols and markets
 
@@ -76,16 +77,17 @@ Change the topic input (e.g. `btc`, `trump`) and click **Load** to see other pre
 
 ```
 insiderscanner/
-├── api/
+├── pages/api/              # Next.js API routes (used by Vercel)
+│   ├── health.ts
 │   ├── prediction.ts       # GET /api/prediction?symbol=SPY
-│   └── predictions-list.ts # GET /api/predictions-list?topic=spx
+│   ├── predictions-list.ts # GET /api/predictions-list?topic=spx
+│   └── predictions.ts      # HTML page (rewritten from / and /predictions)
 ├── config/
 │   └── markets.json        # Symbol → Polymarket slug / Kalshi ticker
 ├── tradingview/
 │   └── prediction_markets.pine
-├── predictions.html        # SPX stats page (served at /predictions via api/predictions.ts)
+├── next.config.js          # Rewrites / and /predictions → /api/predictions
 ├── package.json
-├── vercel.json
 └── README.md
 ```
 
@@ -113,15 +115,13 @@ No API keys are required for Polymarket or Kalshi public market data.
 
 ## Troubleshooting 404 on Vercel
 
-If you get **404: NOT_FOUND** after deploying:
+This repo is **Next.js**. In [Vercel](https://vercel.com/dashboard) → your project → **Settings**:
 
-1. **Try the health check** – Open `https://your-app.vercel.app/api/health` in a browser. If this also 404s, the API isn’t being built.
-2. **Fix project settings** in [Vercel Dashboard](https://vercel.com/dashboard) → your project → **Settings**:
-   - **General** → **Framework Preset** → set to **Other** (not Next.js, Create React App, etc.).
-   - **General** → **Root Directory** → leave blank (project root).
-   - **Git** → confirm the repo is connected and the correct branch (e.g. `main`) is used for production.
-3. **Redeploy** – **Deployments** → open the **⋯** on the latest deployment → **Redeploy**.
-4. **Check the build** – In the deployment, open **Building** and **Functions** and confirm there are no errors and that `api/*.ts` functions appear.
+- **General** → **Framework Preset** should be **Next.js** (auto-detected).
+- **General** → **Root Directory** leave blank.
+- **Build Command** leave default (`next build`).
+
+Then **Redeploy**. After deploy, open `https://your-app.vercel.app/api/health` — you should see `{"ok":true}`.
 
 ## Note on TradingView HTTP
 
