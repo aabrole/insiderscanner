@@ -111,6 +111,18 @@ No API keys are required for Polymarket or Kalshi public market data.
   `https://polymarket.com/event/spx-up-or-down-on-december-31-2025` → slug = `spx-up-or-down-on-december-31-2025`.
 - **Kalshi**: Use their API or docs for event/market tickers (e.g. `GET /events` or `GET /markets`) and put the ticker in `markets.json` under `kalshi`.
 
+## Troubleshooting 404 on Vercel
+
+If you get **404: NOT_FOUND** after deploying:
+
+1. **Try the health check** – Open `https://your-app.vercel.app/api/health` in a browser. If this also 404s, the API isn’t being built.
+2. **Fix project settings** in [Vercel Dashboard](https://vercel.com/dashboard) → your project → **Settings**:
+   - **General** → **Framework Preset** → set to **Other** (not Next.js, Create React App, etc.).
+   - **General** → **Root Directory** → leave blank (project root).
+   - **Git** → confirm the repo is connected and the correct branch (e.g. `main`) is used for production.
+3. **Redeploy** – **Deployments** → open the **⋯** on the latest deployment → **Redeploy**.
+4. **Check the build** – In the deployment, open **Building** and **Functions** and confirm there are no errors and that `api/*.ts` functions appear.
+
 ## Note on TradingView HTTP
 
 The Pine script uses `request.http()` to call your backend. Behavior and availability can depend on your TradingView plan. If the table shows “Set Backend base URL” or never updates:
