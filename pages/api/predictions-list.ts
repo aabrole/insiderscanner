@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import pmxt from "pmxtjs";
 
 function setCors(res: NextApiResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -17,12 +16,6 @@ type MarketRow = {
   url: string;
 };
 
-function outcomeLabel(market: { up?: { label?: string }; down?: { label?: string }; yes?: { label?: string } }): string {
-  if (market.up) return "Up";
-  if (market.down) return "Down";
-  return market.yes?.label ?? "Yes";
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "OPTIONS") {
     setCors(res);
@@ -37,24 +30,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const limit = Math.min(Number(req.query.limit) || 25, 50);
 
   try {
-    const poly = new pmxt.Polymarket();
-    const events = await poly.fetchEvents({ query: topic, limit });
+    const searchRes = await fetch(
+      `https://gamma-api.polymarket.com/public-search?q=${encodeURIComponent(topic)}&limit_per_type=${limit}`
+    );
+    if (!searchRes.ok) {
+      setCors(res);
+      return res.status(502).json({ error: "Polymarket search failed", topic });
+    }
+    const data = (await searchRes.json()) as {
+      events?: Array<{
+        slug: string;
+        title: string;
+        markets?: Array<{
+          question: string;
+          outcomes: string;
+          outcomePrices: string;
+          volume?: string;
+          liquidity?: string;
+          slug: string;
+          closed?: boolean;
+        }>;
+      }>;
+    };
+    const events = data.events ?? [];
     const rows: MarketRow[] = [];
 
     for (const event of events) {
       const markets = event.markets ?? [];
       for (const m of markets) {
-        const yesPct = m.yes?.price != null ? Number(m.yes.price) : 0;
-        const vol = Number(m.volume) || Number(m.volume24h) || 0;
-        const liq = Number(m.liquidity) || 0;
+        if (m.closed) continue;
+        const outcomes = typeof m.outcomes === "string" ? JSON.parse(m.outcomes) : m.outcomes;
+        const prices = typeof m.outcomePrices === "string" ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (!outcomes?.length || !prices?.length) continue;
+        const yesPct = parseFloat(prices[0]);
+        const label = outcomes[0] === "Up" ? "Up" : outcomes[0] === "Down" ? "Down" : outcomes[0];
+        const vol = parseFloat(m.volume ?? "0") || 0;
+        const liq = parseFloat(m.liquidity ?? "0") || 0;
         rows.push({
-          question: m.title || event.title,
+          question: m.question || event.title,
           yesPct: Number.isFinite(yesPct) ? yesPct : 0,
-          outcomeLabel: outcomeLabel(m),
+          outcomeLabel: label,
           volume: vol,
           liquidity: liq,
-          slug: event.slug ?? m.marketId ?? "",
-          url: event.url || `https://polymarket.com/event/${event.slug || ""}`,
+          slug: m.slug || event.slug,
+          url: `https://polymarket.com/event/${event.slug}`,
         });
       }
     }

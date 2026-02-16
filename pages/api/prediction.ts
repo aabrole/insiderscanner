@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import path from "path";
 import fs from "fs";
-import pmxt from "pmxtjs";
 
 function setCors(res: NextApiResponse) {
   res.setHeader("Access-Control-Allow-Origin", "https://www.tradingview.com");
@@ -18,40 +17,50 @@ function getConfig(): MarketsConfig {
   return JSON.parse(raw) as MarketsConfig;
 }
 
-type PriceResult = { yes: number; no: number; question: string };
-
-async function fetchPolymarket(slug: string): Promise<PriceResult | null> {
+async function fetchPolymarket(slug: string): Promise<{ yes: number; no: number; question: string } | null> {
   try {
-    const poly = new pmxt.Polymarket();
-    const markets = await poly.fetchMarkets({ slug });
+    const res = await fetch(`https://gamma-api.polymarket.com/events/slug/${encodeURIComponent(slug)}`);
+    if (!res.ok) return null;
+    const event = await res.json();
+    const markets = event.markets ?? event;
     const market = Array.isArray(markets) ? markets[0] : markets;
     if (!market) return null;
-    const yes = market.yes?.price != null ? Number(market.yes.price) : 0;
-    const no = market.no?.price != null ? Number(market.no.price) : 1 - yes;
+    const outcomes = typeof market.outcomes === "string" ? JSON.parse(market.outcomes) : market.outcomes;
+    const prices = typeof market.outcomePrices === "string" ? JSON.parse(market.outcomePrices) : market.outcomePrices;
+    if (!outcomes?.length || !prices?.length) return null;
+    const yesIdx = outcomes.findIndex((o: string) => o === "Yes" || o === "yes");
+    const noIdx = outcomes.findIndex((o: string) => o === "No" || o === "no");
+    const yes = yesIdx >= 0 ? parseFloat(prices[yesIdx]) : parseFloat(prices[0]);
+    const no = noIdx >= 0 ? parseFloat(prices[noIdx]) : yesIdx === 0 ? parseFloat(prices[1]) : parseFloat(prices[0]);
     return {
       yes: Number.isFinite(yes) ? yes : 0,
       no: Number.isFinite(no) ? no : 1 - yes,
-      question: market.title ?? "",
+      question: market.question ?? event.title ?? "",
     };
   } catch {
     return null;
   }
 }
 
-async function fetchKalshi(ticker: string): Promise<PriceResult | null> {
+async function fetchKalshi(ticker: string): Promise<{ yes: number; no: number; question: string } | null> {
   try {
-    const kalshi = new pmxt.Kalshi();
-    let markets = await kalshi.fetchMarkets({ slug: ticker, limit: 1 });
-    if (!markets?.length) markets = await kalshi.fetchMarkets({ query: ticker, limit: 1 });
-    const market = Array.isArray(markets) ? markets[0] : markets;
-    if (!market) return null;
-    const yes = market.yes?.price != null ? Number(market.yes.price) : 0;
-    const no = market.no?.price != null ? Number(market.no.price) : 1 - yes;
-    return {
-      yes: Number.isFinite(yes) ? yes : 0,
-      no: Number.isFinite(no) ? no : 1 - yes,
-      question: market.title ?? "",
-    };
+    const base = "https://api.elections.kalshi.com/trade-api/v2";
+    const eventRes = await fetch(`${base}/events/${encodeURIComponent(ticker)}`);
+    if (eventRes.ok) {
+      const event = await eventRes.json();
+      const markets = event.markets ?? [];
+      const m = Array.isArray(markets) ? markets[0] : event;
+      const yes = m?.yes_bid != null ? (m.yes_bid + (m.yes_ask ?? m.yes_bid)) / 2 / 100 : m?.last_price != null ? m.last_price / 100 : null;
+      if (yes != null && Number.isFinite(yes)) {
+        return { yes, no: 1 - yes, question: event.title ?? m?.title ?? "" };
+      }
+    }
+    const marketRes = await fetch(`${base}/markets/${encodeURIComponent(ticker)}`);
+    if (!marketRes.ok) return null;
+    const m = await marketRes.json();
+    const yes = m.yes_bid != null ? (m.yes_bid + (m.yes_ask ?? m.yes_bid)) / 2 / 100 : m.last_price != null ? m.last_price / 100 : null;
+    if (yes == null || !Number.isFinite(yes)) return null;
+    return { yes, no: 1 - yes, question: m.title ?? m.question ?? "" };
   } catch {
     return null;
   }
@@ -87,7 +96,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(404).json({ error: "No market for symbol", symbol });
   }
 
-  const result: { symbol: string; polymarket?: PriceResult; kalshi?: PriceResult } = { symbol };
+  const result: { symbol: string; polymarket?: { yes: number; no: number; question: string }; kalshi?: { yes: number; no: number; question: string } } = { symbol };
 
   if (entry.polymarket) {
     const data = await fetchPolymarket(entry.polymarket);
