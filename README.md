@@ -59,18 +59,31 @@ npx vercel --prod
 5. In the indicator settings, set **Backend base URL** to your Vercel URL (e.g. `https://insiderscanner-xxx.vercel.app`) with no trailing slash.
 6. (Optional) Leave **Symbol override** empty to use the chart symbol, or set it to a key from `markets.json` (e.g. `SPX`) to force that market.
 
-The table on the chart will show Polymarket and/or Kalshi probabilities for the current symbol. If you open **SPY** or **SPX**, it will automatically show the prediction markets configured for that symbol.
+The indicator table shows two links: **SPX-style stats** (the predictions page) and **Single symbol API** (raw JSON for the chart symbol). Open either in your browser to see live data; Pine cannot fetch external URLs.
+
+### 4. View SPX prediction stats (like Polymarket)
+
+Open **`https://your-app.vercel.app/predictions.html`** in a browser. You get a grid of prediction markets (default topic: **spx**) with:
+
+- Question title  
+- **X% Up / X% Down / X% Yes** (live odds)  
+- **$XX Vol.** and **$XX Liq.**  
+- Links to Polymarket for each market  
+
+Change the topic input (e.g. `btc`, `trump`) and click **Load** to see other prediction markets. Use this page alongside TradingView for the same kind of stats as [Polymarket’s SPX page](https://polymarket.com/predictions/spx).
 
 ## Project layout
 
 ```
 insiderscanner/
 ├── api/
-│   └── prediction.ts    # GET /api/prediction?symbol=SPY
+│   ├── prediction.ts       # GET /api/prediction?symbol=SPY
+│   └── predictions-list.ts # GET /api/predictions-list?topic=spx
 ├── config/
-│   └── markets.json     # Symbol → Polymarket slug / Kalshi ticker
+│   └── markets.json        # Symbol → Polymarket slug / Kalshi ticker
 ├── tradingview/
 │   └── prediction_markets.pine
+├── predictions.html        # SPX-style stats page (Polymarket-like grid)
 ├── package.json
 ├── vercel.json
 └── README.md
@@ -83,6 +96,12 @@ insiderscanner/
   - `symbol`: requested symbol
   - `polymarket`: `{ "yes", "no", "question" }` if configured and fetched
   - `kalshi`: `{ "yes", "no", "question" }` if configured and fetched
+
+- **GET /api/predictions-list?topic=spx**  
+  Returns a list of Polymarket markets for the topic (e.g. `spx`, `btc`):
+  - `topic`: requested topic
+  - `markets`: array of `{ question, yesPct, outcomeLabel, volume, liquidity, slug, url }`  
+  Used by `predictions.html` to show SPX-style stats.
 
 No API keys are required for Polymarket or Kalshi public market data.
 

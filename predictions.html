@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SPX Predictions | Polymarket-style stats</title>
+  <style>
+    :root {
+      --bg: #0d0d0d;
+      --card: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e5e5e5;
+      --muted: #888;
+      --accent: #00d4aa;
+      --vol: #6b9fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 8px 0; }
+    .topic-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .topic-bar input {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 1rem;
+      width: 140px;
+    }
+    .topic-bar button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .topic-bar button:hover { opacity: 0.9; }
+    .sub { color: var(--muted); font-size: 0.875rem; margin-bottom: 20px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: border-color 0.15s;
+    }
+    .card:hover { border-color: var(--accent); }
+    .card h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+      line-height: 1.35;
+    }
+    .card a { color: inherit; text-decoration: none; }
+    .card a:hover { text-decoration: underline; }
+    .outcome {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .outcome.up { color: #22c55e; }
+    .outcome.down { color: #ef4444; }
+    .outcome.yes { color: var(--accent); }
+    .meta {
+      display: flex;
+      gap: 16px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .meta span { color: var(--vol); }
+    .loading { color: var(--muted); }
+    .err { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <h1>Prediction markets</h1>
+  <p class="sub">Live odds from Polymarket (SPX, SPY, and more). Use alongside TradingView.</p>
+  <div class="topic-bar">
+    <input type="text" id="topic" value="spx" placeholder="e.g. spx" />
+    <button type="button" id="go">Load</button>
+  </div>
+  <div id="root" class="grid"></div>
+
+  <script>
+    const root = document.getElementById("root");
+    const topicInput = document.getElementById("topic");
+    const goBtn = document.getElementById("go");
+
+    function formatVol(n) {
+      if (n >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
+      if (n >= 1e3) return "$" + (n / 1e3).toFixed(1) + "K";
+      return "$" + Math.round(n);
+    }
+
+    function render(data) {
+      if (!data || !data.markets || !data.markets.length) {
+        root.innerHTML = '<p class="loading">No markets found for this topic. Try "spx", "btc", or "trump".</p>';
+        return;
+      }
+      root.innerHTML = data.markets.map((m) => {
+        const pct = Math.round(m.yesPct * 100);
+        const outClass = (m.outcomeLabel || "").toLowerCase();
+        return `
+          <article class="card">
+            <a href="${m.url}" target="_blank" rel="noopener">
+              <h2>${escapeHtml(m.question)}</h2>
+              <div class="outcome ${outClass}">${pct}% ${escapeHtml(m.outcomeLabel)}</div>
+              <div class="meta">
+                <span>${formatVol(m.volume)} Vol.</span>
+                ${formatVol(m.liquidity)} Liq.
+              </div>
+            </a>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    async function load() {
+      const topic = (topicInput.value || "spx").trim().toLowerCase();
+      root.innerHTML = '<p class="loading">Loading…</p>';
+      try {
+        const base = window.location.origin;
+        const res = await fetch(base + "/api/predictions-list?topic=" + encodeURIComponent(topic));
+        const data = await res.json();
+        if (!res.ok) {
+          root.innerHTML = '<p class="err">' + (data.error || "Request failed") + '</p>';
+          return;
+        }
+        render(data);
+      } catch (e) {
+        root.innerHTML = '<p class="err">Failed to load. Is the API deployed at ' + window.location.origin + '?</p>';
+      }
+    }
+
+    goBtn.addEventListener("click", load);
+    topicInput.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+    load();
+  </script>
+</body>
+</html>
