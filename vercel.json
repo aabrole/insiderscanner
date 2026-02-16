@@ -3,14 +3,9 @@
   "builds": [
     { "src": "api/*.ts", "use": "@vercel/node" }
   ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/predictions", "dest": "/api/predictions" },
-    { "src": "/predictions.html", "dest": "/api/predictions" }
-  ],
-  "functions": {
-    "api/predictions.ts": {
-      "includeFiles": "predictions.html"
-    }
-  }
+  "rewrites": [
+    { "source": "/predictions", "destination": "/api/predictions" },
+    { "source": "/predictions.html", "destination": "/api/predictions" },
+    { "source": "/", "destination": "/api/predictions" }
+  ]
 }
